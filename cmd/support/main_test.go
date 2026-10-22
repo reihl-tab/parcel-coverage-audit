@@ -89,3 +89,159 @@ func TestBadgeMetricsMeasuredAndFailureClosed(t *testing.T) {
 		t.Fatal("published failure as success")
 	}
 }
+
+func sandbox(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(cwd) })
+	return root
+}
+func stub(t *testing.T, dir, name, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+body), 0700); err != nil {
+		t.Fatal(err)
+	}
+}
+func TestFetchOfflineSuccessAndAncestryRejection(t *testing.T) {
+	root := sandbox(t)
+	t.Setenv("PATH", root+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("SOURCE_SHA", strings.Repeat("a", 40))
+	t.Setenv("SOURCE_RUN", "1")
+	stub(t, root, "git", `printf '%s\n' "$*" >> git-log`)
+	stub(t, root, "gh", `case "$2" in
+ *actions/runs*) printf '%s' '{"status":"completed","conclusion":"success","path":".github/workflows/permit-feed.yml"}' ;;
+ *compare*) printf '%s' '{"status":"ahead"}' ;;
+ *) exit 2 ;;
+ esac`)
+	if err := fetch(); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile("git-log")
+	if !strings.Contains(string(b), "checkout "+strings.Repeat("a", 40)+" -- data/ginot_hair_parcels.geojson data/permit_requests.json") {
+		t.Fatal(string(b))
+	}
+	stub(t, root, "gh", `case "$2" in
+ *actions/runs*) printf '%s' '{"status":"completed","conclusion":"success","path":".github/workflows/permit-feed.yml"}' ;;
+ *compare*) printf '%s' '{"status":"diverged"}' ;;
+ esac`)
+	if fetch() == nil {
+		t.Fatal("accepted diverged SHA")
+	}
+	t.Setenv("SOURCE_SHA", "bad")
+	if fetch() == nil {
+		t.Fatal("accepted invalid SHA")
+	}
+}
+func TestAPICommandErrorsJSONAndPayload(t *testing.T) {
+	root := sandbox(t)
+	t.Setenv("PATH", root+string(os.PathListSeparator)+os.Getenv("PATH"))
+	stub(t, root, "gh", `cat > payload; printf '%s' '{"ok":true}'`)
+	var out map[string]bool
+	if err := api("test", map[string]string{"safe": "public"}, &out); err != nil || !out["ok"] {
+		t.Fatal(out, err)
+	}
+	b, _ := os.ReadFile("payload")
+	if string(b) != `{"safe":"public"}` {
+		t.Fatal(string(b))
+	}
+	if api("test", make(chan int), nil) == nil {
+		t.Fatal("unsupported payload accepted")
+	}
+	stub(t, root, "gh", `printf '%s' 'invalid json'`)
+	if api("test", nil, &out) == nil {
+		t.Fatal("invalid JSON accepted")
+	}
+	stub(t, root, "gh", `exit 2`)
+	if api("test", nil, nil) == nil {
+		t.Fatal("command error swallowed")
+	}
+}
+func TestCallbackDispatchOfflineAndMissingSource(t *testing.T) {
+	root := sandbox(t)
+	t.Setenv("PATH", root+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("SOURCE_SHA", strings.Repeat("a", 40))
+	t.Setenv("SOURCE_RUN", "1")
+	t.Setenv("GITHUB_RUN_ID", "2")
+	if callback() == nil {
+		t.Fatal("missing report accepted")
+	}
+	os.WriteFile("audit.json", []byte(`{"remaining":2}`), 0600)
+	if callback() == nil {
+		t.Fatal("missing source accepted")
+	}
+	os.MkdirAll("source/data", 0700)
+	os.WriteFile("source/data/permit_requests.json", []byte("public"), 0600)
+	stub(t, root, "gh", `printf '%s' "$*" > route; cat > payload`)
+	if err := callback(); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile("route")
+	if !strings.Contains(string(b), "actions/workflows/audit-result.yml/dispatches") {
+		t.Fatal(string(b))
+	}
+	b, _ = os.ReadFile("payload")
+	if strings.Contains(string(b), "permit-feed.yml") {
+		t.Fatal("callback loop")
+	}
+}
+func TestSummaryActualOutputAndMissingCoverage(t *testing.T) {
+	sandbox(t)
+	t.Setenv("GITHUB_STEP_SUMMARY", "summary.md")
+	os.WriteFile("test-events.json", []byte("{\"Test\":\"TestA\",\"Action\":\"fail\"}\n"), 0600)
+	if err := summary(); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile("summary.md")
+	if !strings.Contains(string(b), "unavailable") || !strings.Contains(string(b), "FAIL") {
+		t.Fatal(string(b))
+	}
+	os.WriteFile("coverage-total.txt", []byte("total 85.0%"), 0600)
+	if err := summary(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GITHUB_STEP_SUMMARY", "missing/summary.md")
+	if summary() == nil {
+		t.Fatal("summary output error hidden")
+	}
+}
+func TestBadgeFilesAndCommandRouting(t *testing.T) {
+	sandbox(t)
+	for _, args := range [][]string{nil, {"unknown"}, {"fetch", "extra"}} {
+		if run(args) == nil {
+			t.Fatal("accepted bad CLI", args)
+		}
+	}
+	if run([]string{"badges"}) == nil {
+		t.Fatal("missing events accepted")
+	}
+	os.WriteFile("test-events.json", []byte("{\"Test\":\"TestA\",\"Action\":\"pass\"}\n"), 0600)
+	if badges() == nil {
+		t.Fatal("missing coverage accepted")
+	}
+	os.WriteFile("coverage-total.txt", []byte("total 90.0%"), 0600)
+	if err := run([]string{"badges"}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile("/tmp/badges/tests.json")
+	if err != nil || !strings.Contains(string(b), "1 passed") {
+		t.Fatal(string(b), err)
+	}
+	t.Setenv("GITHUB_STEP_SUMMARY", "summary.md")
+	if err := run([]string{"summary"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"privacy"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SOURCE_SHA", "bad")
+	if run([]string{"fetch"}) == nil || run([]string{"callback"}) == nil {
+		t.Fatal("validation did not stop dispatch")
+	}
+}
