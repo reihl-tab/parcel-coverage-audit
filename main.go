@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
 
 type Batch struct {
@@ -121,6 +122,8 @@ func run(args []string, out io.Writer) error {
 	published := flags.String("published", "data/permit_requests.json", "published feed")
 	checkpoint := flags.String("checkpoint", "", "optional local checkpoint")
 	size := flags.Int("batch-size", 280, "planned next batch size")
+	plansPath := flags.String("plans", "", "optional public planning rows for observations")
+	asOf := flags.String("as-of", "", "ISO observation date, explicit for reproducibility")
 	cleanOut := flags.String("clean-out", "", "write separate normalized dataset, never overwrite")
 	previous := flags.String("previous", "", "optional previous public permit snapshot for comparison")
 	asJSON := flags.Bool("json", false, "JSON report")
@@ -153,7 +156,7 @@ func run(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if *cleanOut != "" || *previous != "" {
+	if *cleanOut != "" || *previous != "" || *plansPath != "" {
 		raw, err := os.ReadFile(*published)
 		if err != nil {
 			return err
@@ -180,11 +183,27 @@ func run(args []string, out io.Writer) error {
 				return err
 			}
 		}
+		var insight *Insights
+		if *plansPath != "" {
+			day, err := time.Parse("2006-01-02", *asOf)
+			if err != nil {
+				return fmt.Errorf("-as-of ISO date required for observations")
+			}
+			var p struct {
+				Rows []Plan `json:"rows"`
+			}
+			if err := decode(*plansPath, &p); err != nil {
+				return err
+			}
+			value := observations(current, p.Rows, day)
+			insight = &value
+		}
 		return json.NewEncoder(out).Encode(struct {
-			Coverage   Report   `json:"coverage"`
-			Validation []string `json:"validation"`
-			Changes    *Changes `json:"changes,omitempty"`
-		}{report, current.Warnings, diff})
+			Coverage   Report    `json:"coverage"`
+			Validation []string  `json:"validation"`
+			Changes    *Changes  `json:"changes,omitempty"`
+			Insights   *Insights `json:"insights,omitempty"`
+		}{report, current.Warnings, diff, insight})
 	}
 	if *asJSON {
 		encoder := json.NewEncoder(out)

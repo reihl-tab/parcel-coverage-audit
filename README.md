@@ -66,3 +66,17 @@ absence is not proof of deletion, and changed batch ranges introduce older recor
 
 ניקוי הנתונים נכתב לקובץ נפרד ולא דורס מקור. כפילויות סותרות ותאריכים פגומים
 מחזירים שגיאה. הבדלים בין קבצים אינם הוכחה לשינוי בעולם האמיתי או למחיקה.
+
+## Planner observations
+
+Add `-plans /path/to/public/data.json -as-of 2026-10-22` for reproducible
+snapshot observations: permit status distribution, missing status-date counts,
+plan-type counts and deposit-stage derived windows within30days. These are
+observations, not legal conclusions; derived dates must be checked against the
+current official source. No neighborhood mapping is guessed from addresses.
+Processing speed/long-pending outliers require repeated dated comparable snapshots
+and are intentionally unavailable when the data cannot support them.
+
+תובנות ראשונות: התפלגות סטטוסים וסוגי תכניות, חוסרים בתאריכים וחלונות מחושבים
+קרובים. אלה תצפיות על פלט ציבורי חלקי, לא מסקנות משפטיות ולא אימות מועד רשמי.
+אין ניחוש שכונה מכתובת, ואין דירוג מהירות או עיכוב בלי נתוני תאריכים מתאימים.
