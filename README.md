@@ -50,3 +50,19 @@ values are not captured. Source inputs are synthetic. No external dependencies.
 
 זו התקדמות של טווחים, לא הוכחה שכל בקשה לחלקה הצליחה או שאין חורים בסריקות
 קודמות. הכלי אינו מאיץ את הסריקה עצמה. בדיקות, מדידת כיסוי וסיכום CI כלולים.
+
+## Normalize and compare
+
+```sh
+./coverage-audit -parcels parcels.geojson -published current.json \
+  -clean-out normalized.local.json -previous previous.json
+```
+
+Clean output is separate and refuses overwrite. Permit fields are allowlisted;
+identical IDs/rows deduplicate, conflicting duplicates fail rather than choosing
+an arbitrary winner. Dates normalize to ISO or fail validation. Empty status dates
+stay empty with a warning. Snapshot comparisons classify added/changed/absent IDs;
+absence is not proof of deletion, and changed batch ranges introduce older records.
+
+ניקוי הנתונים נכתב לקובץ נפרד ולא דורס מקור. כפילויות סותרות ותאריכים פגומים
+מחזירים שגיאה. הבדלים בין קבצים אינם הוכחה לשינוי בעולם האמיתי או למחיקה.

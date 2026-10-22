@@ -37,6 +37,6 @@ def render(events, coverage, source):
 if __name__ == '__main__':
     events = Path('test-events.json').read_text() if Path('test-events.json').exists() else ''
     coverage = Path('coverage-total.txt').read_text() if Path('coverage-total.txt').exists() else 'unavailable'
-    text = render(events, coverage, Path('main_test.go').read_text())
+    text = render(events, coverage, '\n'.join(p.read_text() for p in sorted(Path('.').glob('*_test.go'))))
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
         out.write(text)

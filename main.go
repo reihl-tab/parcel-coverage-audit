@@ -121,6 +121,8 @@ func run(args []string, out io.Writer) error {
 	published := flags.String("published", "data/permit_requests.json", "published feed")
 	checkpoint := flags.String("checkpoint", "", "optional local checkpoint")
 	size := flags.Int("batch-size", 280, "planned next batch size")
+	cleanOut := flags.String("clean-out", "", "write separate normalized dataset, never overwrite")
+	previous := flags.String("previous", "", "optional previous public permit snapshot for comparison")
 	asJSON := flags.Bool("json", false, "JSON report")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -150,6 +152,39 @@ func run(args []string, out io.Writer) error {
 	report, err := audit(total, feed, cp, *size)
 	if err != nil {
 		return err
+	}
+	if *cleanOut != "" || *previous != "" {
+		raw, err := os.ReadFile(*published)
+		if err != nil {
+			return err
+		}
+		current, err := normalize(raw)
+		if err != nil {
+			return err
+		}
+		var diff *Changes
+		if *previous != "" {
+			old, err := os.ReadFile(*previous)
+			if err != nil {
+				return err
+			}
+			before, err := normalize(old)
+			if err != nil {
+				return err
+			}
+			value := compare(before, current)
+			diff = &value
+		}
+		if *cleanOut != "" {
+			if err := writeClean(*cleanOut, current); err != nil {
+				return err
+			}
+		}
+		return json.NewEncoder(out).Encode(struct {
+			Coverage   Report   `json:"coverage"`
+			Validation []string `json:"validation"`
+			Changes    *Changes `json:"changes,omitempty"`
+		}{report, current.Warnings, diff})
 	}
 	if *asJSON {
 		encoder := json.NewEncoder(out)
