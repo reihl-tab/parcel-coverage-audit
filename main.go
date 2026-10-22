@@ -127,11 +127,15 @@ func run(args []string, out io.Writer) error {
 	cleanOut := flags.String("clean-out", "", "write separate normalized dataset, never overwrite")
 	previous := flags.String("previous", "", "optional previous public permit snapshot for comparison")
 	asJSON := flags.Bool("json", false, "JSON report")
+	serve := flags.Bool("mcp", false, "serve read-only MCP over stdio; data paths come from the flags, not from tool arguments")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected positional arguments")
+	}
+	if *serve {
+		return serveMCP(os.Stdin, out, mcpConfig{Parcels: *parcels, Published: *published, Checkpoint: *checkpoint, Previous: *previous, Plans: *plansPath, BatchSize: *size})
 	}
 	var p Parcels
 	var feed Feed

@@ -102,3 +102,9 @@ public feed version is compared when present; different batch ranges are flagged
 Absence is not deletion and snapshot additions are not proof of new applications.
 The scan callback still publishes aggregate range information only; full bundle
 receiver publication is a separate step, not claimed complete here.
+
+## MCP server (read-only)
+
+`coverage-audit -mcp` serves the public aggregate analysis over stdio (MCP, JSON-RPC 2.0, standard library only). Tools: `coverage_status`, `snapshot_changes` (needs `-previous`), `planner_insights` (needs `-plans`, argument `as_of`). Data paths are fixed by the startup flags; tool arguments cannot name files. No network, no writes, counts only (no permit lists). Every result keeps the existing caveats: cursor progress is not verified query success, absence is not deletion, derived dates are not official deadlines.
+
+Connect (example, Claude Code): `claude mcp add parcel-audit -- /path/to/coverage-audit -mcp -parcels data/ginot_hair_parcels.geojson -published data/permit_requests.json`. For any client that takes a JSON config: `{"mcpServers":{"parcel-audit":{"command":"/path/to/coverage-audit","args":["-mcp","-parcels","data/ginot_hair_parcels.geojson","-published","data/permit_requests.json"]}}}`. Build with `go build -o coverage-audit .`.
