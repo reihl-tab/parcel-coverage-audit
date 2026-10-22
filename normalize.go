@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -136,11 +137,58 @@ func writeClean(path string, data Dataset) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	return writeFileAtomic(path, append(body, '\n'), 0600)
+}
+
+// writeFileAtomic writes body to a temp file in dir(path), syncs it, closes
+// it (checking the Close error, since some filesystems only report a failed
+// flush there), then publishes it to path with Link so a file only ever
+// appears at path once it is complete, and never overwrites an existing one
+// (Link fails with ErrExist, race-free against a concurrent writer). Every
+// error path removes the temp file, so a failed write leaves no file at path
+// and no stray temp file behind.
+// afterTempWriteHook, when set, runs after the temp file is written, synced
+// and closed, but before it is published with Link. It exists only for
+// tests, to inject a failure between "write complete" and "publish" (a
+// vanished temp file, a read-only directory, ...) without adding a branch
+// to the production path; it is nil in normal operation.
+var afterTempWriteHook func(tmpPath string)
+
+func writeFileAtomic(path string, body []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".clean-*.tmp")
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = f.Write(append(body, '\n'))
-	return err
+	tmpPath := tmp.Name()
+	cleanup := func() { os.Remove(tmpPath) }
+
+	if err := tmp.Chmod(mode); err != nil {
+		tmp.Close()
+		cleanup()
+		return err
+	}
+	if _, err := tmp.Write(body); err != nil {
+		tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return err
+	}
+	if afterTempWriteHook != nil {
+		afterTempWriteHook(tmpPath)
+	}
+	if err := os.Link(tmpPath, path); err != nil {
+		cleanup()
+		return err
+	}
+	cleanup()
+	return nil
 }
