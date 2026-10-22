@@ -46,3 +46,37 @@ func TestSnapshotChangesDoNotClaimDeletionOrNewRealWorldEvents(t *testing.T) {
 		t.Fatal("missing caveat")
 	}
 }
+
+func TestWriteCleanFailedPublishLeavesNoFileAndNoStrayTemp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "clean.json")
+
+	// Inject a failure between "temp file written, synced and closed" and
+	// "published to path": the temp file vanishes (simulating, e.g., a
+	// competing cleanup or a filesystem remount) just before the publish
+	// step, so the Link that would create path fails.
+	old := afterTempWriteHook
+	defer func() { afterTempWriteHook = old }()
+	afterTempWriteHook = func(tmpPath string) {
+		if err := os.Remove(tmpPath); err != nil {
+			t.Fatalf("setup: could not remove temp file to inject failure: %v", err)
+		}
+	}
+
+	err := writeClean(path, Dataset{Requests: []Permit{{Tik: "A"}}})
+	if err == nil {
+		t.Fatal("expected the publish step to fail")
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("partial/complete file left at path after a failed write: %v", statErr)
+	}
+	entries, readErr := os.ReadDir(dir)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".clean-") {
+			t.Fatalf("stray temp file left behind: %s", e.Name())
+		}
+	}
+}
