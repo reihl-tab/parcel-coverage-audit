@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  go-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Format and vet
+        run: |
+          test -z "$(gofmt -l *.go)"
+          go vet ./...
+      - name: Test with race and coverage
+        run: |
+          set -o pipefail
+          go test -race -json -coverprofile=coverage.out ./... | tee test-events.json
+      - name: Coverage total
+        if: always()
+        run: go tool cover -func=coverage.out | tail -1 > coverage-total.txt
+      - name: Build
+        run: go build -trimpath -o /tmp/coverage-audit .
+      - name: Summary
+        if: always()
+        run: python3 scripts/summary.py

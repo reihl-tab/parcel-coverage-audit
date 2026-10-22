@@ -1,0 +1,6 @@
+/coverage-audit
+/coverage.out
+/test-events.json
+*.local.json
+
+/coverage-total.txt
