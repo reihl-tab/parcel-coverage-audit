@@ -124,7 +124,7 @@ func TestFetchOfflineSuccessAndAncestryRejection(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile("git-log")
-	if !strings.Contains(string(b), "checkout "+strings.Repeat("a", 40)+" -- data/ginot_hair_parcels.geojson data/permit_requests.json") {
+	if !strings.Contains(string(b), "checkout "+strings.Repeat("a", 40)+" -- data/ginot_hair_parcels.geojson data/permit_requests.json docs/data.json") {
 		t.Fatal(string(b))
 	}
 	stub(t, root, "gh", `case "$2" in
@@ -243,5 +243,45 @@ func TestBadgeFilesAndCommandRouting(t *testing.T) {
 	t.Setenv("SOURCE_SHA", "bad")
 	if run([]string{"fetch"}) == nil || run([]string{"callback"}) == nil {
 		t.Fatal("validation did not stop dispatch")
+	}
+}
+func TestHistoryAndBundleManifest(t *testing.T) {
+	root := sandbox(t)
+	t.Setenv("PATH", root+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("SOURCE_SHA", strings.Repeat("a", 40))
+	t.Setenv("SOURCE_RUN", "1")
+	stub(t, root, "git", `case "$3" in
+ log) printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ;;
+ show) printf '%s' '{"requests":[]}' ;;
+ esac`)
+	if err := history(strings.Repeat("a", 40)); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile("previous.json")
+	if !strings.Contains(string(b), "requests") {
+		t.Fatal(string(b))
+	}
+	for _, n := range []string{"audit.json", "analysis.json", "clean.json"} {
+		os.WriteFile(n, []byte("{}"), 0600)
+	}
+	if err := run([]string{"bundle"}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = os.ReadFile("manifest.json")
+	if !strings.Contains(string(b), "source_commit") || !strings.Contains(string(b), "sha256") {
+		t.Fatal(string(b))
+	}
+	os.WriteFile("clean.json", []byte("bad"), 0600)
+	if bundle() == nil {
+		t.Fatal("bad artifact accepted")
+	}
+	stub(t, root, "git", `printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`)
+	os.Remove("previous.json")
+	if err := history(strings.Repeat("a", 40)); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = os.ReadFile("history.json")
+	if !strings.Contains(string(b), `"available":false`) {
+		t.Fatal(string(b))
 	}
 }

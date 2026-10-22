@@ -109,3 +109,47 @@ func BenchmarkAudit(b *testing.B) {
 		audit(4739, Feed{Batch: Batch{Offset: 400, Limit: 280}}, nil, 280)
 	}
 }
+func TestCLIBundleValidationBeforeWriteAndSnapshotInsights(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "p.json")
+	f := filepath.Join(dir, "f.json")
+	plans := filepath.Join(dir, "plans.json")
+	old := filepath.Join(dir, "old.json")
+	clean := filepath.Join(dir, "clean.json")
+	os.WriteFile(p, []byte(`{"features":[{"properties":{"gush":1,"helka":1}},{"properties":{"gush":1,"helka":2}}]}`), 0600)
+	os.WriteFile(f, []byte(`{"batch":{"offset":0,"limit":1},"requests":[{"tik_num":"A"}]}`), 0600)
+	os.WriteFile(old, []byte(`{"batch":{"offset":0,"limit":1},"requests":[{"tik_num":"B"}]}`), 0600)
+	os.WriteFile(plans, []byte(`{"rows":[{"pl_number":"P","station_desc":"הפקדה","objection_deadline_derived_60d_from_publication":"2026-11-05"}]}`), 0600)
+	args := []string{"-parcels", p, "-published", f, "-clean-out", clean, "-plans", plans, "-previous", old}
+	var out bytes.Buffer
+	if run(append(args, "-as-of", "bad"), &out) == nil {
+		t.Fatal("invalid as-of accepted")
+	}
+	if _, err := os.Stat(clean); !os.IsNotExist(err) {
+		t.Fatal("wrote output before input validation")
+	}
+	if err := run(append(args, "-as-of", "2026-10-22"), &out); err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Changes  Changes  `json:"changes"`
+		Insights Insights `json:"insights"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Changes.Added) != 1 || result.Changes.Added[0] != "A" || len(result.Insights.Near) != 1 || result.Insights.Near[0].Days != 14 {
+		t.Fatalf("%+v", result)
+	}
+	if run(append(args, "-as-of", "2026-10-22"), &out) == nil {
+		t.Fatal("overwrote clean artifact")
+	}
+	os.Remove(clean)
+	os.WriteFile(plans, []byte("bad"), 0600)
+	if run(append(args, "-as-of", "2026-10-22"), &out) == nil {
+		t.Fatal("invalid plans accepted")
+	}
+	if _, err := os.Stat(clean); !os.IsNotExist(err) {
+		t.Fatal("output created on invalid plans")
+	}
+}

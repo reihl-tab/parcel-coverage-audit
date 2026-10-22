@@ -93,8 +93,10 @@ func fetch() error {
 	if _, err := command(nil, "git", "clone", "--filter=blob:none", "--no-checkout", "https://github.com/"+source+".git", "source"); err != nil {
 		return err
 	}
-	_, err := command(nil, "git", "-C", "source", "checkout", sha, "--", "data/ginot_hair_parcels.geojson", "data/permit_requests.json")
-	return err
+	if _, err := command(nil, "git", "-C", "source", "checkout", sha, "--", "data/ginot_hair_parcels.geojson", "data/permit_requests.json", "docs/data.json"); err != nil {
+		return err
+	}
+	return history(sha)
 }
 func callbackPayload(report, raw []byte, sha, run, auditor string) (map[string]any, error) {
 	if !shaRE.MatchString(sha) || !idRE.MatchString(run) || !idRE.MatchString(auditor) {
@@ -287,6 +289,8 @@ func run(args []string) error {
 		return callback()
 	case "privacy":
 		return privacy(".")
+	case "bundle":
+		return bundle()
 	case "badges":
 		return badges()
 	case "summary":
@@ -350,4 +354,59 @@ func badges() error {
 		}
 	}
 	return nil
+}
+
+// history selects the nearest earlier distinct feed from the immutable public source.
+func history(sha string) error {
+	revisions, err := command(nil, "git", "-C", "source", "log", "-n", "2", "--format=%H", sha, "--", "data/permit_requests.json")
+	if err != nil {
+		return err
+	}
+	ids := strings.Fields(string(revisions))
+	info := map[string]any{"available": false, "reason": "No earlier public feed version in source history."}
+	if len(ids) > 1 {
+		if !shaRE.MatchString(ids[1]) {
+			return fmt.Errorf("invalid history SHA")
+		}
+		b, err := command(nil, "git", "-C", "source", "show", ids[1]+":data/permit_requests.json")
+		if err != nil {
+			return err
+		}
+		if !json.Valid(b) {
+			return fmt.Errorf("invalid previous feed JSON")
+		}
+		if err := os.WriteFile("previous.json", b, 0600); err != nil {
+			return err
+		}
+		info = map[string]any{"available": true, "previous_commit": ids[1], "warning": "Different batch ranges can introduce older records; absence is not deletion."}
+	}
+	b, err := json.Marshal(info)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile("history.json", b, 0600)
+}
+func bundle() error {
+	names := []string{"audit.json", "analysis.json", "clean.json", "history.json"}
+	hashes := map[string]string{}
+	for _, name := range names {
+		b, err := os.ReadFile(name)
+		if err != nil {
+			return err
+		}
+		if len(b) > 20*1024*1024 || !json.Valid(b) {
+			return fmt.Errorf("invalid or oversized bundle member")
+		}
+		hashes[name] = fmt.Sprintf("%x", sha256.Sum256(b))
+	}
+	sha := os.Getenv("SOURCE_SHA")
+	run := os.Getenv("SOURCE_RUN")
+	if !shaRE.MatchString(sha) || !idRE.MatchString(run) {
+		return fmt.Errorf("invalid source identifiers")
+	}
+	b, err := json.MarshalIndent(map[string]any{"schema_version": 1, "source_commit": sha, "source_run": run, "sha256": hashes}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile("manifest.json", b, 0600)
 }

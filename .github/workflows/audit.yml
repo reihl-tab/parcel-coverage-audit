@@ -33,7 +33,26 @@ jobs:
         run: |
           go build -trimpath -o /tmp/coverage-audit .
           /tmp/coverage-audit -parcels source/data/ginot_hair_parcels.geojson -published source/data/permit_requests.json -json > audit.json
-          /tmp/coverage-audit -parcels source/data/ginot_hair_parcels.geojson -published source/data/permit_requests.json -clean-out clean.json > normalization.json
+          ARGS=()
+          if [ -f previous.json ]; then ARGS+=(-previous previous.json); fi
+          /tmp/coverage-audit -parcels source/data/ginot_hair_parcels.geojson -published source/data/permit_requests.json -clean-out clean.json -plans source/docs/data.json -as-of "$(date -u +%F)" "${ARGS[@]}" > analysis.json
+      - name: Build immutable public-source manifest
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+        run: go run ./cmd/support bundle
+      - name: Publish consumable analysis bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: parcel-analysis-${{ inputs.source_run }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            audit.json
+            analysis.json
+            clean.json
+            history.json
+            manifest.json
       - name: Return bounded report to scanner repository
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}

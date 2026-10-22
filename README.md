@@ -91,3 +91,14 @@ and are intentionally unavailable when the data cannot support them.
 אין ניחוש שכונה מכתובת, ואין דירוג מהירות או עיכוב בלי נתוני תאריכים מתאימים.
 
 All runtime and CI support code is Go (standard library only). `cmd/support` handles workflow handshake, privacy checking and CI summaries; the root CLI remains offline and standalone.
+
+## Download analysis
+
+Each successful audit workflow publishes a `parcel-analysis-<source-run>` artifact
+on its run page for7days: separate `clean.json`, `analysis.json` (snapshot changes,
+planner observations and limits), aggregate audit, history metadata and SHA256
+manifest bound to the source SHA. Raw files are not changed. The nearest earlier
+public feed version is compared when present; different batch ranges are flagged.
+Absence is not deletion and snapshot additions are not proof of new applications.
+The scan callback still publishes aggregate range information only; full bundle
+receiver publication is a separate step, not claimed complete here.

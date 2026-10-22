@@ -178,11 +178,6 @@ func run(args []string, out io.Writer) error {
 			value := compare(before, current)
 			diff = &value
 		}
-		if *cleanOut != "" {
-			if err := writeClean(*cleanOut, current); err != nil {
-				return err
-			}
-		}
 		var insight *Insights
 		if *plansPath != "" {
 			day, err := time.Parse("2006-01-02", *asOf)
@@ -197,6 +192,11 @@ func run(args []string, out io.Writer) error {
 			}
 			value := observations(current, p.Rows, day)
 			insight = &value
+		}
+		if *cleanOut != "" {
+			if err := writeClean(*cleanOut, current); err != nil {
+				return err
+			}
 		}
 		return json.NewEncoder(out).Encode(struct {
 			Coverage   Report    `json:"coverage"`
