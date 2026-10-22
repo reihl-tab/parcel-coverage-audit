@@ -80,3 +80,5 @@ and are intentionally unavailable when the data cannot support them.
 תובנות ראשונות: התפלגות סטטוסים וסוגי תכניות, חוסרים בתאריכים וחלונות מחושבים
 קרובים. אלה תצפיות על פלט ציבורי חלקי, לא מסקנות משפטיות ולא אימות מועד רשמי.
 אין ניחוש שכונה מכתובת, ואין דירוג מהירות או עיכוב בלי נתוני תאריכים מתאימים.
+
+All runtime and CI support code is Go (standard library only). `cmd/support` handles workflow handshake, privacy checking and CI summaries; the root CLI remains offline and standalone.

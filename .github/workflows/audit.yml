@@ -28,7 +28,7 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
           SOURCE_RUN: ${{ inputs.source_run }}
           GH_TOKEN: ${{ secrets.PARCEL_AUDIT_DISPATCH_TOKEN }}
-        run: python3 scripts/handshake.py fetch
+        run: go run ./cmd/support fetch
       - name: Analyze public snapshot without modifying raw files
         run: |
           go build -trimpath -o /tmp/coverage-audit .
@@ -39,7 +39,7 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
           SOURCE_RUN: ${{ inputs.source_run }}
           GH_TOKEN: ${{ secrets.PARCEL_AUDIT_DISPATCH_TOKEN }}
-        run: python3 scripts/handshake.py callback
+        run: go run ./cmd/support callback
       - name: Status summary
         if: always()
         run: |

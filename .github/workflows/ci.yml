@@ -17,11 +17,10 @@ jobs:
           cache: false
       - name: Offline handshake and privacy tests
         run: |
-          python3 -m unittest discover -s scripts -p "test_*.py"
-          python3 scripts/privacy_scan.py
+          go run ./cmd/support privacy
       - name: Format and vet
         run: |
-          test -z "$(gofmt -l *.go)"
+          test -z "$(gofmt -l $(find . -name '*.go'))"
           go vet ./...
       - name: Test with race and coverage
         run: |
@@ -34,4 +33,4 @@ jobs:
         run: go build -trimpath -o /tmp/coverage-audit .
       - name: Summary
         if: always()
-        run: python3 scripts/summary.py
+        run: go run ./cmd/support summary
