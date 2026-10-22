@@ -287,6 +287,8 @@ func run(args []string) error {
 		return callback()
 	case "privacy":
 		return privacy(".")
+	case "badges":
+		return badges()
 	case "summary":
 		return summary()
 	default:
@@ -298,4 +300,54 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// Badge endpoints contain aggregate metrics only, derived from successful CI.
+func badgeMetrics(events []byte, coverage string) (map[string]map[string]any, error) {
+	s := states(events)
+	passed, skipped := 0, 0
+	for _, state := range s {
+		switch state {
+		case "pass":
+			passed++
+		case "skip":
+			skipped++
+		}
+	}
+	re := regexp.MustCompile(`([0-9.]+)%`)
+	m := re.FindAllStringSubmatch(coverage, -1)
+	if len(s) == 0 || passed+skipped != len(s) || len(m) == 0 {
+		return nil, fmt.Errorf("empty/failing tests or missing coverage")
+	}
+	badge := func(label, msg string) map[string]any {
+		return map[string]any{"schemaVersion": 1, "label": label, "message": msg, "color": "blue"}
+	}
+	return map[string]map[string]any{"tests": badge("Go suite", fmt.Sprintf("%d passed, %d skipped", passed, skipped)), "coverage": badge("test coverage", m[len(m)-1][1]+"%")}, nil
+}
+func badges() error {
+	events, err := os.ReadFile("test-events.json")
+	if err != nil {
+		return err
+	}
+	coverage, err := os.ReadFile("coverage-total.txt")
+	if err != nil {
+		return err
+	}
+	values, err := badgeMetrics(events, string(coverage))
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll("/tmp/badges", 0700); err != nil {
+		return err
+	}
+	for name, value := range values {
+		b, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile("/tmp/badges/"+name+".json", append(b, '\n'), 0600); err != nil {
+			return err
+		}
+	}
+	return nil
 }

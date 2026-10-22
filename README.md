@@ -1,5 +1,14 @@
 # Parcel coverage audit / בודק התקדמות סריקת חלקות
 
+[![published range](https://img.shields.io/endpoint?url=https%3A%2F%2Freihlinstinct.github.io%2Fginot-hair-plans%2Fbadge%2Fparcel-progress.json&cacheSeconds=300)](https://github.com/reihlinstinct/ginot-hair-plans/actions/workflows/permit-feed.yml)
+[![remaining](https://img.shields.io/endpoint?url=https%3A%2F%2Freihlinstinct.github.io%2Fginot-hair-plans%2Fbadge%2Fparcel-remaining.json&cacheSeconds=300)](https://github.com/reihlinstinct/ginot-hair-plans/actions/workflows/permit-feed.yml)
+[![Go suite](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Freihlinstinct%2Fparcel-coverage-audit%2Fbadge-data%2Ftests.json&cacheSeconds=300)](https://github.com/reihlinstinct/parcel-coverage-audit/actions/workflows/ci.yml)
+[![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Freihlinstinct%2Fparcel-coverage-audit%2Fbadge-data%2Fcoverage.json&cacheSeconds=300)](https://github.com/reihlinstinct/parcel-coverage-audit/actions/workflows/ci.yml)
+[![CI](https://github.com/reihlinstinct/parcel-coverage-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/reihlinstinct/parcel-coverage-audit/actions/workflows/ci.yml)
+[![latest release](https://img.shields.io/github/v/release/reihlinstinct/parcel-coverage-audit)](https://github.com/reihlinstinct/parcel-coverage-audit/releases)
+
+Range counters follow the scanner repository, not successful-query proof. Test/coverage badges come from the last successful main Go suite including support commands. Static public JSON only; Shields may cache for five minutes.
+
 A small Go learning project: one read-only executable, standard library only,
 no network calls, credentials, VPN or Python runtime dependency. Reads local
 copies of the public parcel GeoJSON and published permit feed produced by

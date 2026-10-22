@@ -8,6 +8,8 @@ permissions:
   contents: read
 jobs:
   go-test:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -34,3 +36,8 @@ jobs:
       - name: Summary
         if: always()
         run: go run ./cmd/support summary
+      - name: Publish measured main-only badges
+        if: ${{ success() && github.ref == 'refs/heads/main' }}
+        run: |
+          go run ./cmd/support badges
+          bash scripts/push_badges.sh /tmp/badges

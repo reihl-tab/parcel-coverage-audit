@@ -79,3 +79,13 @@ func TestNestedTestSourceDiscovery(t *testing.T) {
 		t.Fatal(src, err)
 	}
 }
+func TestBadgeMetricsMeasuredAndFailureClosed(t *testing.T) {
+	events := []byte("{\"Test\":\"TestA\",\"Action\":\"pass\"}\n")
+	values, err := badgeMetrics(events, "total: (statements) 67.3%")
+	if err != nil || values["coverage"]["message"] != "67.3%" || values["tests"]["message"] != "1 passed, 0 skipped" {
+		t.Fatal(values, err)
+	}
+	if _, err := badgeMetrics([]byte("{\"Test\":\"TestA\",\"Action\":\"fail\"}\n"), "67.3%"); err == nil {
+		t.Fatal("published failure as success")
+	}
+}
