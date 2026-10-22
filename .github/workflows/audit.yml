@@ -1,0 +1,47 @@
+name: Audit published parcel scan
+run-name: Parcel audit ${{ inputs.source_run }}
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Published ginot main commit SHA
+        required: true
+      source_run:
+        description: Successful permit-feed run ID
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: parcel-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Validate source and fetch public snapshot
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+          GH_TOKEN: ${{ secrets.PARCEL_AUDIT_DISPATCH_TOKEN }}
+        run: python3 scripts/handshake.py fetch
+      - name: Analyze public snapshot without modifying raw files
+        run: |
+          go build -trimpath -o /tmp/coverage-audit .
+          /tmp/coverage-audit -parcels source/data/ginot_hair_parcels.geojson -published source/data/permit_requests.json -json > audit.json
+          /tmp/coverage-audit -parcels source/data/ginot_hair_parcels.geojson -published source/data/permit_requests.json -clean-out clean.json > normalization.json
+      - name: Return bounded report to scanner repository
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+          GH_TOKEN: ${{ secrets.PARCEL_AUDIT_DISPATCH_TOKEN }}
+        run: python3 scripts/handshake.py callback
+      - name: Status summary
+        if: always()
+        run: |
+          echo '## Published parcel analysis' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f audit.json ]; then cat audit.json >> "$GITHUB_STEP_SUMMARY"; else echo 'Analysis unavailable; inspect failed step.' >> "$GITHUB_STEP_SUMMARY"; fi

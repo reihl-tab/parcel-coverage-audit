@@ -15,6 +15,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - name: Offline handshake and privacy tests
+        run: |
+          python3 -m unittest discover -s scripts -p "test_*.py"
+          python3 scripts/privacy_scan.py
       - name: Format and vet
         run: |
           test -z "$(gofmt -l *.go)"

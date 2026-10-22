@@ -4,3 +4,5 @@
 *.local.json
 
 /coverage-total.txt
+
+__pycache__/

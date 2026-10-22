@@ -9,7 +9,7 @@ patterns = {
     'phone': r'\+\d[\d -]{8,}\d',
     'plate-shaped number': r'(?<!\d)\d{2,3}-\d{2,3}-\d{2,3}(?!\d)',
 }
-files = [p for p in Path('.').rglob('*') if p.is_file() and '.git' not in p.parts]
+files = [p for p in Path('.').rglob('*') if p.is_file() and '.git' not in p.parts and '__pycache__' not in p.parts]
 errors = []
 for path in files:
     if path.name in ('privacy_scan.py',):
