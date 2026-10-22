@@ -12,7 +12,9 @@ Range counters follow the scanner repository, not successful-query proof. Test/c
 A small Go learning project: one read-only executable, standard library only,
 no network calls, credentials, VPN or Python runtime dependency. Reads local
 copies of the public parcel GeoJSON and published permit feed produced by
-[ginot-hair-plans](https://github.com/reihlinstinct/ginot-hair-plans).
+[ginot-hair-plans](https://github.com/reihlinstinct/ginot-hair-plans), which
+commits both at the top level of its `data/` directory
+(`data/ginot_hair_parcels.geojson`, `data/permit_requests.json`).
 
 ## Build and run
 
@@ -22,8 +24,8 @@ Go1.27 or later:
 go test -race -cover ./...
 go vet ./...
 go build -trimpath -o coverage-audit .
-./coverage-audit -parcels /path/to/ginot_hair_parcels.geojson \
-  -published /path/to/permit_requests.json -batch-size 280 -json
+./coverage-audit -parcels ../ginot-hair-plans/data/ginot_hair_parcels.geojson \
+  -published ../ginot-hair-plans/data/permit_requests.json -batch-size 280 -json
 ```
 
 Drop `-json` for plain text. Optional `-checkpoint /path/to/local-checkpoint.json`
