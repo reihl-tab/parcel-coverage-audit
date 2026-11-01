@@ -1,0 +1,29 @@
+{
+ "version": 1,
+ "findings": [
+  {
+   "path": ".github/workflows/scorecard.yml",
+   "rule": "job-write",
+   "scope": "analysis",
+   "evidence": "security-events: write",
+   "issue": "https://github.com/reihlinstinct/parcel-coverage-audit/issues/43",
+   "reason": "Approved job-scoped SARIF upload to GitHub code scanning; no code or secrets write."
+  },
+  {
+   "path": ".github/workflows/ci.yml",
+   "rule": "job-write",
+   "scope": "go-test",
+   "evidence": "contents: write",
+   "issue": "https://github.com/reihlinstinct/parcel-coverage-audit/issues/43",
+   "reason": "CI job pushes updated coverage badges to the repo; job-scoped; reviewed."
+  },
+  {
+   "path": ".github/workflows/codeql.yml",
+   "rule": "top-level-write",
+   "scope": "workflow",
+   "evidence": "security-events: write",
+   "issue": "https://github.com/reihlinstinct/parcel-coverage-audit/issues/43",
+   "reason": "Pre-existing workflow-level write permission; tracked for job-level scoping in this issue."
+  }
+ ]
+}
