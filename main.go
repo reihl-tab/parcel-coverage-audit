@@ -6,6 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strconv"
+
+	"github.com/reihlinstinct/parcel-coverage-audit/internal/clispec"
 	"os"
 	"time"
 )
@@ -118,16 +121,28 @@ func audit(total int, feed Feed, cp *Feed, size int) (Report, error) {
 }
 func run(args []string, out io.Writer) error {
 	flags := flag.NewFlagSet("coverage-audit", flag.ContinueOnError)
-	parcels := flags.String("parcels", "data/ginot_hair_parcels.geojson", "local GeoJSON")
-	published := flags.String("published", "data/permit_requests.json", "published feed")
-	checkpoint := flags.String("checkpoint", "", "optional local checkpoint")
-	size := flags.Int("batch-size", 280, "planned next batch size")
-	plansPath := flags.String("plans", "", "optional public planning rows for observations")
-	asOf := flags.String("as-of", "", "ISO observation date, explicit for reproducibility")
-	cleanOut := flags.String("clean-out", "", "write separate normalized dataset, never overwrite")
-	previous := flags.String("previous", "", "optional previous public permit snapshot for comparison")
-	asJSON := flags.Bool("json", false, "JSON report")
-	serve := flags.Bool("mcp", false, "serve read-only MCP over stdio; data paths come from the flags, not from tool arguments")
+	// Flag names, defaults and help text come from the canonical spec (#45).
+	strs := map[string]*string{}
+	ints := map[string]*int{}
+	bools := map[string]*bool{}
+	for _, o := range clispec.AuditOptions {
+		switch o.Kind {
+		case clispec.String:
+			strs[o.Name] = flags.String(o.Name, o.Def, o.Usage)
+		case clispec.Int:
+			d, err := strconv.Atoi(o.Def)
+			if err != nil {
+				return fmt.Errorf("clispec default for -%s: %w", o.Name, err)
+			}
+			ints[o.Name] = flags.Int(o.Name, d, o.Usage)
+		case clispec.Bool:
+			bools[o.Name] = flags.Bool(o.Name, o.Def == "true", o.Usage)
+		}
+	}
+	parcels, published, checkpoint := strs["parcels"], strs["published"], strs["checkpoint"]
+	size, plansPath, asOf := ints["batch-size"], strs["plans"], strs["as-of"]
+	cleanOut, previous := strs["clean-out"], strs["previous"]
+	asJSON, serve := bools["json"], bools["mcp"]
 	if err := flags.Parse(args); err != nil {
 		return err
 	}

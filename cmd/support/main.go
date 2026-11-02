@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/reihlinstinct/parcel-coverage-audit/internal/clispec"
 	"time"
 )
 
@@ -279,8 +281,9 @@ func summary() error {
 	return err
 }
 func run(args []string) error {
+	// Subcommand names come from the canonical spec (#45).
 	if len(args) != 1 {
-		return fmt.Errorf("expected fetch, callback, privacy or summary")
+		return fmt.Errorf("expected one of: %s", strings.Join(clispec.SupportSubcommands, ", "))
 	}
 	switch args[0] {
 	case "fetch":
