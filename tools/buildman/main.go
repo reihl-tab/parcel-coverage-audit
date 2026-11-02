@@ -61,7 +61,11 @@ func render(c clispec.Command) string {
 		usage += " SUBCOMMAND"
 	}
 	for _, o := range c.Options {
-		usage += " [-" + o.Name + " VALUE]"
+		if o.Kind == clispec.Bool {
+			usage += " [-" + o.Name + "]"
+		} else {
+			usage += " [-" + o.Name + " VALUE]"
+		}
 	}
 	b.WriteString(".B " + esc(usage) + "\n")
 	b.WriteString(".SH DESCRIPTION\n")
@@ -77,7 +81,15 @@ func render(c clispec.Command) string {
 	if len(c.Options) > 0 {
 		b.WriteString(".SH OPTIONS\n")
 		for _, o := range c.Options {
-			fmt.Fprintf(&b, ".TP\n.B \\-%s VALUE\n%s (default: %s)\n", esc(o.Name), textLine(o.Usage), esc(o.Def))
+			flag := ".TP\n.B \\-" + esc(o.Name) + "\n"
+			if o.Kind != clispec.Bool {
+				flag = ".TP\n.B \\-" + esc(o.Name) + " VALUE\n"
+			}
+			def := ""
+			if o.Def != "" {
+				def = " (default: " + esc(o.Def) + ")"
+			}
+			fmt.Fprintf(&b, "%s%s%s\n", flag, textLine(o.Usage), def)
 		}
 	}
 	if len(c.Examples) > 0 {

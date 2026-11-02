@@ -11,7 +11,7 @@ package clispec
 // Program identity used by the generated pages.
 const (
 	Program = "coverage-audit"
-	Version = "1.0.0"
+	Version = "0.1.0"
 	ManDate = "November 2026"
 	Manual  = "Coverage Audit Manual"
 )

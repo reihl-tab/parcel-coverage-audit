@@ -47,6 +47,28 @@ func TestSupportUsageListsSpecSubcommands(t *testing.T) {
 	}
 }
 
+// TestSupportHelpFlag requires coverage-audit-support -h/--help to print the
+// subcommand list and exit 0 (review follow-up, #50).
+func TestSupportHelpFlag(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "support")
+	if out, err := exec.Command("go", "build", "-o", bin, "./cmd/support").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	for _, arg := range []string{"-h", "--help", "help"} {
+		cmd := exec.Command(bin, arg)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Errorf("%s: exit error %v\n%s", arg, err, out)
+			continue
+		}
+		for _, sub := range clispec.SupportSubcommands {
+			if !strings.Contains(string(out), sub) {
+				t.Errorf("%s: output missing subcommand %q", arg, sub)
+			}
+		}
+	}
+}
+
 // TestManPagesUpToDate regenerates the pages into a temp dir and diffs
 // against the committed man/man1 pages (drift test).
 func TestManPagesUpToDate(t *testing.T) {

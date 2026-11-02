@@ -282,6 +282,11 @@ func summary() error {
 }
 func run(args []string) error {
 	// Subcommand names come from the canonical spec (#45).
+	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help" || args[0] == "help") {
+		fmt.Printf("usage: coverage-audit-support SUBCOMMAND\n\nsubcommands: %s\n",
+			strings.Join(clispec.SupportSubcommands, ", "))
+		return nil
+	}
 	if len(args) != 1 {
 		return fmt.Errorf("expected one of: %s", strings.Join(clispec.SupportSubcommands, ", "))
 	}
