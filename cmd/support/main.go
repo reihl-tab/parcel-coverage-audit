@@ -138,7 +138,7 @@ func callback() error {
 
 // Patterns are synthesized here so this source does not resemble a leaked secret.
 var privacyPatterns = map[string]*regexp.Regexp{
-	"GitHub credential":   regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{30,})\b`),
+	"GitHub credential":   regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]+)*|github_pat_[A-Za-z0-9_]{30,})\b`),
 	"private key":         regexp.MustCompile(`-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----`),
 	"email":               regexp.MustCompile(`[A-Za-z0-9_.+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`),
 	"phone":               regexp.MustCompile(`\+[0-9][0-9 -]{8,}[0-9]`),

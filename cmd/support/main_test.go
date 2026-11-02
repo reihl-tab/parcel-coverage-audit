@@ -46,10 +46,18 @@ func TestPrivacyRecognizesLeaksAndPrivateFiles(t *testing.T) {
 	if err := privacy(root); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []string{"gh" + "p_" + strings.Repeat("a", 25), "owner" + "@" + "example.invalid", "+" + "12345678901", "-----BEGIN " + "PRIVATE KEY-----", "12" + "-345-67"} {
+	stateless := "ghs" + "_12345_" + strings.Repeat("A", 100) + "." + strings.Repeat("B", 300) + "." + strings.Repeat("C", 108)
+	longStateless := "ghs" + "_12345_" + strings.Repeat("A", 100) + "." + strings.Repeat("B", 300) + "." + strings.Repeat("C", 200)
+	for _, bad := range []string{"gh" + "p_" + strings.Repeat("a", 25), stateless, longStateless, "owner" + "@" + "example.invalid", "+" + "12345678901", "-----BEGIN " + "PRIVATE KEY-----", "12" + "-345-67"} {
 		os.WriteFile(filepath.Join(root, "safe.txt"), []byte(bad), 0600)
 		if privacy(root) == nil {
 			t.Fatal("missed private material")
+		}
+	}
+	for _, safe := range []string{"ghs" + "_12345_" + strings.Repeat("A", 10), "gh" + "p_short"} {
+		os.WriteFile(filepath.Join(root, "safe.txt"), []byte(safe), 0600)
+		if err := privacy(root); err != nil {
+			t.Fatalf("short token fragment flagged: %v", err)
 		}
 	}
 	os.WriteFile(filepath.Join(root, "safe.txt"), []byte("safe"), 0600)
