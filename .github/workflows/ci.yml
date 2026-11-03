@@ -31,6 +31,20 @@ jobs:
       - name: Coverage total
         if: always()
         run: go tool cover -func=coverage.out | tail -1 > coverage-total.txt
+      - name: Coverage floor
+        if: always()
+        run: |
+          # Ratchet: total ./... statements >= 70.0 (measured 70.1% at 28d1b5f;
+          # restore to >= 80 once tools/buildman and internal/clispec are tested).
+          # Production root package >= 80 (measured 86.3% at 28d1b5f).
+          # Metric is statement coverage; go tool cover has no branch metric.
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {sub("%","",$3); print $3}')
+          echo "Total statement coverage (all packages): ${total}% (floor 70)" | tee -a "$GITHUB_STEP_SUMMARY"
+          awk -v t="$total" -v f=70 'BEGIN { exit !(t+0 >= f+0 && t != "") }'
+          go test -covermode=atomic -coverprofile=cover-root.out . >/dev/null
+          root=$(go tool cover -func=cover-root.out | awk '/^total:/ {sub("%","",$3); print $3}')
+          echo "Root package statement coverage: ${root}% (floor 80)" | tee -a "$GITHUB_STEP_SUMMARY"
+          awk -v t="$root" -v f=80 'BEGIN { exit !(t+0 >= f+0 && t != "") }'
       - name: Build
         run: go build -trimpath -o /tmp/coverage-audit .
       - name: Summary
