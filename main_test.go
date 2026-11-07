@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -151,5 +152,133 @@ func TestCLIBundleValidationBeforeWriteAndSnapshotInsights(t *testing.T) {
 	}
 	if _, err := os.Stat(clean); !os.IsNotExist(err) {
 		t.Fatal("output created on invalid plans")
+	}
+}
+
+// testMainHook, when set by a test file's init (only in a re-executed child,
+// see normalize_fsize_linux_test.go), runs in TestMain instead of the tests
+// and exits the process itself.
+var testMainHook func()
+
+// TestMain lets the exit-status tests re-run this test binary as
+// coverage-audit: with COVERAGE_AUDIT_TEST_ARGS set, it runs main() with those
+// arguments (newline-separated) instead of the tests, so main()'s os.Exit(1)
+// path is observed through the child's exit status and stderr. Same pattern
+// as tools/buildman (#61).
+func TestMain(m *testing.M) {
+	if testMainHook != nil {
+		testMainHook()
+	}
+	if args, ok := os.LookupEnv("COVERAGE_AUDIT_TEST_ARGS"); ok {
+		os.Args = []string{"coverage-audit"}
+		if args != "" {
+			os.Args = append(os.Args, strings.Split(args, "\n")...)
+		}
+		main()
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+// runMainExit re-executes the test binary as coverage-audit with args and
+// returns its stdout, stderr and exit code. Child coverage is not merged into
+// the parent's -coverprofile; the in-process test below covers the call line.
+func runMainExit(t *testing.T, args ...string) (stdout, stderr string, code int) {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^$")
+	cmd.Env = append(os.Environ(), "COVERAGE_AUDIT_TEST_ARGS="+strings.Join(args, "\n"))
+	var o, e bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &o, &e
+	err := cmd.Run()
+	if ee, ok := err.(*exec.ExitError); ok {
+		code = ee.ExitCode()
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	return o.String(), e.String(), code
+}
+
+// auditFixture writes the synthetic two-parcel inputs used by
+// TestCLIJSONTextAndErrors and returns the CLI arguments that read them.
+func auditFixture(t *testing.T) []string {
+	t.Helper()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "p.json")
+	f := filepath.Join(dir, "f.json")
+	if err := os.WriteFile(p, []byte(`{"features":[{"properties":{"gush":1,"helka":1}},{"properties":{"gush":1,"helka":2}}]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(f, []byte(`{"batch":{"offset":0,"limit":1}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return []string{"-parcels", p, "-published", f, "-batch-size", "1"}
+}
+
+// TestMainInProcessSuccess runs main() in this process on a successful
+// invocation (main returns without os.Exit), so the call path counts in the
+// coverage profile, and checks that it passes os.Args[1:] to run and writes
+// the report to os.Stdout.
+func TestMainInProcessSuccess(t *testing.T) {
+	args := auditFixture(t)
+	outPath := filepath.Join(t.TempDir(), "stdout")
+	outFile, err := os.Create(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldArgs, oldStdout := os.Args, os.Stdout
+	os.Args = append([]string{"coverage-audit"}, append(args, "-json")...)
+	os.Stdout = outFile
+	defer func() { os.Args, os.Stdout = oldArgs, oldStdout }()
+	main()
+	os.Stdout = oldStdout
+	if err := outFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r Report
+	if err := json.Unmarshal(body, &r); err != nil || r.Total != 2 || r.Remaining != 1 || r.Next == nil || r.Next.Offset != 1 {
+		t.Fatalf("stdout %q: report %+v, error %v", body, r, err)
+	}
+}
+
+// TestMainExitStatus checks main()'s process contract in a child process:
+// exit 0 with the report on stdout on success, and exit 1 with a
+// "coverage-audit: <error>" line on stderr (and nothing on stdout) on failure.
+func TestMainExitStatus(t *testing.T) {
+	args := auditFixture(t)
+	missing := filepath.Join(t.TempDir(), "missing.json")
+	for _, c := range []struct {
+		name     string
+		args     []string
+		wantCode int
+		wantOut  string
+		wantErr  string
+	}{
+		{"success", args, 0, "Next range: offset=1 limit=1\n", ""},
+		{"unexpected positional", append(append([]string{}, args...), "extra"), 1, "", "coverage-audit: unexpected positional arguments\n"},
+		{"unknown flag", []string{"-no-such-flag"}, 1, "", "coverage-audit: flag provided but not defined: -no-such-flag\n"},
+		{"missing parcels file", []string{"-parcels", missing}, 1, "", "coverage-audit: parcels: "},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			out, errOut, code := runMainExit(t, c.args...)
+			if code != c.wantCode {
+				t.Fatalf("exit %d, want %d (stderr %q)", code, c.wantCode, errOut)
+			}
+			if c.wantCode == 0 {
+				if !strings.Contains(out, c.wantOut) || errOut != "" {
+					t.Errorf("stdout %q (want it to contain %q), stderr %q (want empty)", out, c.wantOut, errOut)
+				}
+				return
+			}
+			if out != "" {
+				t.Errorf("stdout = %q, want empty on failure", out)
+			}
+			if !strings.Contains(errOut, c.wantErr) {
+				t.Errorf("stderr %q does not contain %q", errOut, c.wantErr)
+			}
+		})
 	}
 }

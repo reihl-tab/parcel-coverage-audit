@@ -80,3 +80,127 @@ func TestWriteCleanFailedPublishLeavesNoFileAndNoStrayTemp(t *testing.T) {
 		}
 	}
 }
+
+// assertNoStrayTemp fails if any writeFileAtomic temp file is left in dir.
+func assertNoStrayTemp(t *testing.T, dir string) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".clean-") {
+			t.Errorf("stray temp file left behind: %s", e.Name())
+		}
+	}
+}
+
+func TestWriteFileAtomicSuccessAndFailurePaths(t *testing.T) {
+	body := []byte("synthetic body\n")
+	for _, c := range []struct {
+		name  string
+		mode  os.FileMode
+		setup func(t *testing.T, dir string) string // returns the target path
+		check func(t *testing.T, path string)       // state of path after the call
+		ok    bool
+	}{
+		{
+			name:  "success 0600",
+			mode:  0600,
+			setup: func(t *testing.T, dir string) string { return filepath.Join(dir, "out.json") },
+			ok:    true,
+		},
+		{
+			name:  "success 0640",
+			mode:  0640,
+			setup: func(t *testing.T, dir string) string { return filepath.Join(dir, "out.json") },
+			ok:    true,
+		},
+		{
+			name: "target is an existing directory",
+			mode: 0600,
+			setup: func(t *testing.T, dir string) string {
+				path := filepath.Join(dir, "out.json")
+				if err := os.Mkdir(path, 0700); err != nil {
+					t.Fatal(err)
+				}
+				return path
+			},
+			check: func(t *testing.T, path string) {
+				if fi, err := os.Stat(path); err != nil || !fi.IsDir() {
+					t.Errorf("existing directory not preserved: %v", err)
+				}
+			},
+		},
+		{
+			name: "target is an existing file",
+			mode: 0600,
+			setup: func(t *testing.T, dir string) string {
+				path := filepath.Join(dir, "out.json")
+				if err := os.WriteFile(path, []byte("previous\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				return path
+			},
+			check: func(t *testing.T, path string) {
+				if got, err := os.ReadFile(path); err != nil || string(got) != "previous\n" {
+					t.Errorf("existing file changed: %q, %v", got, err)
+				}
+			},
+		},
+		{
+			name: "parent directory missing",
+			mode: 0600,
+			setup: func(t *testing.T, dir string) string {
+				return filepath.Join(dir, "no-such-dir", "out.json")
+			},
+		},
+		{
+			name: "directory not writable",
+			mode: 0600,
+			setup: func(t *testing.T, dir string) string {
+				if os.Geteuid() == 0 {
+					t.Skip("running as root: directory permissions are not enforced")
+				}
+				sub := filepath.Join(dir, "ro")
+				if err := os.Mkdir(sub, 0500); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { os.Chmod(sub, 0700) })
+				return filepath.Join(sub, "out.json")
+			},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			path := c.setup(t, t.TempDir())
+			err := writeFileAtomic(path, body, c.mode)
+			if c.ok {
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, rerr := os.ReadFile(path)
+				if rerr != nil || string(got) != string(body) {
+					t.Fatalf("content %q, %v; want %q", got, rerr, body)
+				}
+				fi, serr := os.Stat(path)
+				if serr != nil || fi.Mode().Perm() != c.mode {
+					t.Fatalf("mode %v, %v; want %v", fi.Mode().Perm(), serr, c.mode)
+				}
+			} else if err == nil {
+				t.Fatal("writeFileAtomic succeeded, want an error")
+			} else if c.check != nil {
+				c.check(t, path)
+			} else if _, serr := os.Lstat(path); !os.IsNotExist(serr) {
+				t.Errorf("target exists after a failed write: %v", serr)
+			}
+			if dir := filepath.Dir(path); dirExists(dir) {
+				assertNoStrayTemp(t, dir)
+			}
+		})
+	}
+}
+
+func dirExists(dir string) bool {
+	fi, err := os.Stat(dir)
+	return err == nil && fi.IsDir()
+}
