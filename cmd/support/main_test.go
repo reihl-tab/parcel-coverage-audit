@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/reihlinstinct/parcel-coverage-audit/internal/clispec"
 )
 
 func TestSourceValidation(t *testing.T) {
@@ -291,5 +295,117 @@ func TestHistoryAndBundleManifest(t *testing.T) {
 	b, _ = os.ReadFile("history.json")
 	if !strings.Contains(string(b), `"available":false`) {
 		t.Fatal(string(b))
+	}
+}
+
+// TestMain lets the exit-status tests re-run this test binary as the support
+// command: with SUPPORT_TEST_ARGS set, it runs main() with those arguments
+// (newline-separated) instead of the tests, so main()'s os.Exit(1) path is
+// observed through the child's exit status and stderr. Same pattern as
+// tools/buildman (#61).
+func TestMain(m *testing.M) {
+	if args, ok := os.LookupEnv("SUPPORT_TEST_ARGS"); ok {
+		os.Args = []string{"support"}
+		if args != "" {
+			os.Args = append(os.Args, strings.Split(args, "\n")...)
+		}
+		main()
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+// runMainExit re-executes the test binary as the support command in dir and
+// returns its stdout, stderr and exit code. Child coverage is not merged into
+// the parent's -coverprofile; TestMainInProcessPrivacy covers the call line.
+func runMainExit(t *testing.T, dir string, args ...string) (stdout, stderr string, code int) {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^$")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "SUPPORT_TEST_ARGS="+strings.Join(args, "\n"))
+	var o, e bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &o, &e
+	err := cmd.Run()
+	if ee, ok := err.(*exec.ExitError); ok {
+		code = ee.ExitCode()
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	return o.String(), e.String(), code
+}
+
+// TestMainInProcessPrivacy runs main() in this process on an offline command
+// that succeeds (main returns without os.Exit), so the call path counts in
+// the coverage profile, and checks that it routes os.Args[1:] to run.
+func TestMainInProcessPrivacy(t *testing.T) {
+	root := sandbox(t)
+	if err := os.WriteFile(filepath.Join(root, "safe.txt"), []byte("public aggregate only"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	outPath := filepath.Join(t.TempDir(), "stdout")
+	outFile, err := os.Create(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldArgs, oldStdout := os.Args, os.Stdout
+	os.Args = []string{"support", "privacy"}
+	os.Stdout = outFile
+	defer func() { os.Args, os.Stdout = oldArgs, oldStdout }()
+	main()
+	os.Stdout = oldStdout
+	if err := outFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "PASS: 1 source/config/doc files scanned; no detected private material.\n"; string(body) != want {
+		t.Fatalf("stdout = %q, want %q", body, want)
+	}
+}
+
+// TestMainExitStatus checks main()'s process contract in a child process:
+// exit 0 on success, and exit 1 with the bare error on stderr on failure.
+func TestMainExitStatus(t *testing.T) {
+	clean := t.TempDir()
+	if err := os.WriteFile(filepath.Join(clean, "safe.txt"), []byte("public aggregate only"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	leaky := t.TempDir()
+	if err := os.WriteFile(filepath.Join(leaky, "raw.geojson"), []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name     string
+		dir      string
+		args     []string
+		wantCode int
+		wantOut  string
+		wantErr  string
+	}{
+		{"privacy pass", clean, []string{"privacy"}, 0, "PASS: 1 source/config/doc files scanned", ""},
+		{"no command", clean, nil, 1, "", "expected one of: " + strings.Join(clispec.SupportSubcommands, ", ") + "\n"},
+		{"unknown command", clean, []string{"no-such-command"}, 1, "", "unknown support command\n"},
+		{"privacy finding", leaky, []string{"privacy"}, 1, "", "raw.geojson: prohibited input/output data file\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			out, errOut, code := runMainExit(t, c.dir, c.args...)
+			if code != c.wantCode {
+				t.Fatalf("exit %d, want %d (stderr %q)", code, c.wantCode, errOut)
+			}
+			if c.wantCode == 0 {
+				if !strings.Contains(out, c.wantOut) || errOut != "" {
+					t.Errorf("stdout %q (want it to contain %q), stderr %q (want empty)", out, c.wantOut, errOut)
+				}
+				return
+			}
+			if out != "" {
+				t.Errorf("stdout = %q, want empty on failure", out)
+			}
+			if errOut != c.wantErr {
+				t.Errorf("stderr = %q, want %q", errOut, c.wantErr)
+			}
+		})
 	}
 }
