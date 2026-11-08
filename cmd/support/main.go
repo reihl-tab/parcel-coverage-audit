@@ -336,6 +336,9 @@ func badgeMetrics(events []byte, coverage string) (map[string]map[string]any, er
 	}
 	return map[string]map[string]any{"tests": badge("Go suite", fmt.Sprintf("%d passed, %d skipped", passed, skipped)), "coverage": badge("test coverage", m[len(m)-1][1]+"%")}, nil
 }
+
+var badgeDir = "/tmp/badges"
+
 func badges() error {
 	events, err := os.ReadFile("test-events.json")
 	if err != nil {
@@ -349,7 +352,7 @@ func badges() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll("/tmp/badges", 0700); err != nil {
+	if err := os.MkdirAll(badgeDir, 0700); err != nil {
 		return err
 	}
 	for name, value := range values {
@@ -357,7 +360,7 @@ func badges() error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile("/tmp/badges/"+name+".json", append(b, '\n'), 0600); err != nil {
+		if err := os.WriteFile(badgeDir+"/"+name+".json", append(b, '\n'), 0600); err != nil {
 			return err
 		}
 	}

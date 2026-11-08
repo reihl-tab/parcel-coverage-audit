@@ -225,9 +225,9 @@ func TestSummaryActualOutputAndMissingCoverage(t *testing.T) {
 }
 func TestBadgeFilesAndCommandRouting(t *testing.T) {
 	sandbox(t)
-	// badges() writes to the fixed /tmp/badges path (see main.go); remove it
-	// after the test so no state is left behind between runs.
-	t.Cleanup(func() { os.RemoveAll("/tmp/badges") })
+	oldBadgeDir := badgeDir
+	badgeDir = t.TempDir()
+	t.Cleanup(func() { badgeDir = oldBadgeDir })
 	for _, args := range [][]string{nil, {"unknown"}, {"fetch", "extra"}} {
 		if run(args) == nil {
 			t.Fatal("accepted bad CLI", args)
@@ -244,7 +244,7 @@ func TestBadgeFilesAndCommandRouting(t *testing.T) {
 	if err := run([]string{"badges"}); err != nil {
 		t.Fatal(err)
 	}
-	b, err := os.ReadFile("/tmp/badges/tests.json")
+	b, err := os.ReadFile(badgeDir + "/tests.json")
 	if err != nil || !strings.Contains(string(b), "1 passed") {
 		t.Fatal(string(b), err)
 	}
