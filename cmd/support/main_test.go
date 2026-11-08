@@ -225,6 +225,9 @@ func TestSummaryActualOutputAndMissingCoverage(t *testing.T) {
 }
 func TestBadgeFilesAndCommandRouting(t *testing.T) {
 	sandbox(t)
+	// badges() writes to the fixed /tmp/badges path (see main.go); remove it
+	// after the test so no state is left behind between runs.
+	t.Cleanup(func() { os.RemoveAll("/tmp/badges") })
 	for _, args := range [][]string{nil, {"unknown"}, {"fetch", "extra"}} {
 		if run(args) == nil {
 			t.Fatal("accepted bad CLI", args)
